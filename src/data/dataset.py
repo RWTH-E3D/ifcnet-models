@@ -1,0 +1,163 @@
+import torch
+from torch.utils.data import Dataset
+from torchvision.transforms import transforms
+from PIL import Image
+import numpy as np
+from pathlib import Path
+from src.data.util import read_ply
+
+
+def translate_pointcloud(pointcloud):
+    xyz1 = np.random.uniform(low=2./3., high=3./2., size=[3])
+    xyz2 = np.random.uniform(low=-0.2, high=0.2, size=[3])
+       
+    translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
+    return translated_pointcloud
+
+
+def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.02):
+    N, C = pointcloud.shape
+    pointcloud += np.clip(sigma * np.random.randn(N, C), -1*clip, clip)
+    return pointcloud
+
+class IFCNetPly(Dataset):
+
+    def __init__(self, data_root, class_names, partition="train", transform=None):
+        self.transform = transform
+        self.data_root = data_root
+        self.class_names = class_names
+        self.partition = partition
+        self.files = list(data_root.glob(f"**/{partition}/*.ply"))
+
+        self.cache = {}
+
+    def __getitem__(self, idx):
+        if idx in self.cache:
+            pointcloud, label = self.cache[idx]
+        else:
+            f = self.files[idx]
+            df = read_ply(f)
+            pointcloud = df["points"].to_numpy()
+            class_name = f.parts[-3]
+            label = self.class_names.index(class_name)
+            self.cache[idx] = (pointcloud, label)
+
+        if self.transform:
+            pointcloud = self.transform(pointcloud)
+
+        return pointcloud, label
+
+    def __len__(self):
+        return len(self.files)
+
+
+class IFCNetNumpy(Dataset):
+
+    def __init__(self, data_root, max_faces, class_names, partition='train'):
+        self.data_root = data_root
+        self.max_faces = max_faces
+        self.partition = partition
+        self.files = list(data_root.glob(f"**/{partition}/*.npz"))
+        self.class_names = class_names
+
+    def __getitem__(self, idx):
+        path = self.files[idx]
+        class_name = path.parts[-3]
+        label = self.class_names.index(class_name)
+        data = np.load(path)
+        face = data['faces']
+        neighbor_index = data['neighbors']
+
+        # fill for n < max_faces with randomly picked faces
+        num_point = len(face)
+        if num_point < self.max_faces:
+            fill_face = []
+            fill_neighbor_index = []
+            for i in range(self.max_faces - num_point):
+                index = np.random.randint(0, num_point)
+                fill_face.append(face[index])
+                fill_neighbor_index.append(neighbor_index[index])
+            face = np.concatenate((face, np.array(fill_face)))
+            neighbor_index = np.concatenate((neighbor_index, np.array(fill_neighbor_index)))
+
+        # to tensor
+        face = torch.from_numpy(face)
+        neighbor_index = torch.from_numpy(neighbor_index)
+        target = torch.tensor(label, dtype=torch.long)
+        data = torch.cat([face, neighbor_index], dim=1)
+
+        return data, target
+
+    def __len__(self):
+        return len(self.files)
+
+
+class MultiviewImgDataset(Dataset):
+
+    def __init__(self, root_dir, classnames, num_views, partition="train", transform=None):
+        self.classnames = classnames
+        self.root_dir = root_dir
+        self.transform = transform
+        self.num_views = num_views
+
+        self.filepaths = sorted(root_dir.glob(f"**/{partition}/*.png"))
+        self.filepaths = np.array(self.filepaths).reshape(-1, self.num_views)
+
+    def __len__(self):
+        return len(self.filepaths)
+
+    def __getitem__(self, idx):
+        paths = self.filepaths[idx]
+        class_name = paths[0].parts[-3]
+        label = self.classnames.index(class_name)
+
+        imgs = []
+        for p in paths:
+            img = Image.open(p).convert('RGB')
+            if self.transform:
+                img = self.transform(img)
+            imgs.append(img)
+
+        return torch.stack(imgs), label
+
+
+class SingleImgDataset(Dataset):
+
+    def __init__(self, root_dir, classnames, partition="train", transform=None):
+        self.classnames = classnames
+        self.transform = transform
+        self.root_dir = root_dir
+
+        self.filepaths = list(root_dir.glob(f"**/{partition}/*.png"))
+
+    def __len__(self):
+        return len(self.filepaths)
+
+    def __getitem__(self, idx):
+        path = self.filepaths[idx]
+        class_name = path.parts[-3]
+        label = self.classnames.index(class_name)
+
+        img = Image.open(self.filepaths[idx]).convert('RGB')
+        if self.transform:
+            img = self.transform(img)
+
+        return img, label
+
+if __name__ == "__main__":
+    import json
+    from torch.utils.data import DataLoader
+    from src.models.models import MeshNet
+    with open("IFCNetCore_Classes.json", "r") as f:
+        class_names = json.load(f)
+
+    max_faces = 106661
+    model = MeshNet(64, 0.2, "Concat")
+
+    train_dataset = IFCNetNumpy(Path("./data/processed/MeshNet/IFCNetCore"), max_faces,
+        class_names, partition="train")
+    train_loader = DataLoader(train_dataset, batch_size=8)
+
+    for data, labels in train_loader:
+        outputs = model(data)
+        
