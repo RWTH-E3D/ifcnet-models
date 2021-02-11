@@ -52,16 +52,16 @@ def _get_svcnn_loaders(data_root, class_names, batch_size, pretrained=True):
     return train_loader, val_loader
 
 
-def _pretrain_single_view(data_root, class_names, batch_size,
-                        learning_rate, weight_decay, log_dir, model_dir,
+def _pretrain_single_view(data_root, class_names, epochs, batch_size,
+                        learning_rate, weight_decay, checkpoint_dir,
                         pretrained=True, cnn_name="vgg11"):
     model = SVCNN(nclasses=len(class_names), pretrained=pretrained, cnn_name=cnn_name)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     train_loader, val_loader = _get_svcnn_loaders(data_root, class_names, batch_size, pretrained)
 
     trainer = Trainer(model, train_loader, val_loader, class_names,
-        optimizer, nn.CrossEntropyLoss(), log_dir, model_dir, "SVCNN")
-    trainer.train(30)
+        optimizer, nn.CrossEntropyLoss(), checkpoint_dir, "SVCNN")
+    trainer.train(epochs)
     return model
 
 
@@ -81,40 +81,36 @@ def _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrai
     return train_loader, val_loader
 
 
-def _train_multi_view(svcnn, data_root, class_names, batch_size,
-                    learning_rate, weight_decay, log_dir, model_dir,
+def _train_multi_view(svcnn, data_root, class_names, epochs, batch_size,
+                    learning_rate, weight_decay, checkpoint_dir,
                     pretrained=True, cnn_name="vgg11", num_views=12):
     model = MVCNN(svcnn, nclasses=len(class_names), num_views=num_views)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     train_loader, val_loader = _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrained=pretrained)
 
     trainer = Trainer(model, train_loader, val_loader, class_names,
-        optimizer, nn.CrossEntropyLoss(), log_dir, model_dir, "MVCNN",
+        optimizer, nn.CrossEntropyLoss(), checkpoint_dir, "MVCNN",
         after_load_cb=lambda x: x.view(-1, *x.shape[-3:]))
-    trainer.train(30)
+    trainer.train(epochs)
     return model
 
 
-def train_mvcnn(data_root, class_names, batch_size,
-                learning_rate, weight_decay,
-                log_dir, model_dir,
-                pretrained=True, cnn_name="vgg11", num_views=12):
+def train_mvcnn(config, checkpoint_dir=None, data_root=None, class_names=None):
+    if checkpoint_dir is None:
+        checkpoint_dir = Path("./models/MVCNN")
+        
+    batch_size = config["batch_size"]
+    learning_rate = config["learning_rate"]
+    weight_decay = config["weight_decay"]
+    pretrained = config["pretrained"]
+    cnn_name = config["cnn_name"]
+    num_views = config["num_views"]
+    epochs = config["epochs"]
 
-    with (log_dir/"config.json").open("w") as f:
-        json.dump({
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "weight_decay": weight_decay,
-            "data_root": str(data_root),
-            "pretrained": pretrained,
-            "cnn_name": cnn_name,
-            "num_views": num_views
-        }, f)
-
-    svcnn = _pretrain_single_view(data_root, class_names, batch_size,
-                                learning_rate, weight_decay, log_dir, model_dir,
+    svcnn = _pretrain_single_view(data_root, class_names, epochs, batch_size,
+                                learning_rate, weight_decay, checkpoint_dir,
                                 pretrained=pretrained, cnn_name=cnn_name)
-    mvcnn = _train_multi_view(svcnn, data_root, class_names, int(batch_size/num_views),
-                            learning_rate, weight_decay, log_dir, model_dir,
+    mvcnn = _train_multi_view(svcnn, data_root, class_names, epochs, int(batch_size/num_views),
+                            learning_rate, weight_decay, checkpoint_dir,
                             pretrained=pretrained, cnn_name=cnn_name, num_views=num_views)
     return mvcnn
