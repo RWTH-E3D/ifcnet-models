@@ -25,8 +25,11 @@ def _get_train_val_transforms(pretrained=True):
 
     if pretrained:
         norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        train_transform.append(norm)
-        val_transform.append(norm)
+    else:
+        norm = transforms.Normalize(mean=[0.911, 0.911, 0.911], std=[0.148, 0.148, 0.148])
+    
+    train_transform.append(norm)
+    val_transform.append(norm)
 
     train_transform = transforms.Compose(train_transform)
     val_transform = transforms.Compose(val_transform)
