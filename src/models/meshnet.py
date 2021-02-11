@@ -128,8 +128,7 @@ def _train(data_root, class_names, batch_size,
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     trainer = Trainer(model, train_loader, val_loader, class_names,
-        optimizer, _cal_loss, log_dir, model_dir, "MeshNet",
-        after_load_cb=lambda x: )
+        optimizer, _cal_loss, log_dir, model_dir, "MeshNet")
     trainer.train(100)
     return model
 
