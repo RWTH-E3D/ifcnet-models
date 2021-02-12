@@ -7,7 +7,6 @@ from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
     precision_score, recall_score, f1_score)
 from ray import tune
 from pathlib import Path
-from tqdm import tqdm
 import numpy as np
 import pickle
 import os
@@ -41,7 +40,7 @@ class Trainer:
             all_labels = []
             running_loss = 0.0
 
-            for data, labels in tqdm(self.train_loader):
+            for data, labels in self.train_loader:
                 data, labels = data.to(self.device), labels.to(self.device)
                 if self.after_load_cb:
                     data = self.after_load_cb(data)
@@ -67,8 +66,8 @@ class Trainer:
             val_metrics = self.evaluate()
 
             self.save(epoch)
-            tune.report(**train_metrics)
-            tune.report(**val_metrics)
+            metrics = {**train_metrics, **val_metrics}
+            tune.report(**metrics)
 
     def evaluate(self):
         self.model.eval()
@@ -77,7 +76,7 @@ class Trainer:
         running_loss = 0.0
 
         with torch.no_grad():
-            for data, labels in tqdm(self.val_loader):
+            for data, labels in self.val_loader:
                 data, labels = data.to(self.device), labels.to(self.device)
                 if self.after_load_cb:
                     data = self.after_load_cb(data)
@@ -118,10 +117,12 @@ class Trainer:
 
     def save(self, epoch):
         with tune.checkpoint_dir(epoch) as d:
-            target_path = Path(d)/"checkpoint"
+            target_path = Path(d) / "checkpoint"
             torch.save((self.model.state_dict(), self.optimizer.state_dict()), target_path)
         
     def load(self):
+        if not self.checkpoint_dir: return
+
         path = self.checkpoint_dir / "checkpoint"
         if not path.exists(): return
 

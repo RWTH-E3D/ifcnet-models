@@ -9,6 +9,7 @@ from src.models.meshnet import train_meshnet
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
+from ray.tune.suggest.optuna import OptunaSearch
 
 
 class Model(str, Enum):
@@ -18,10 +19,8 @@ class Model(str, Enum):
 
 
 def main(model: Model):
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = Path(f"./logs/{model.value}/{timestamp}")
+    log_dir = Path(f"./logs/{model.value}")
     log_dir.mkdir(exist_ok=True, parents=True)
-    checkpoint_dir = Path(f"./models/{model.value}/")
     data_root = Path(f"./data/processed/{model.value}/IFCNetCore").absolute()
 
     with open("IFCNetCore_Classes.json", "r") as f:
@@ -29,26 +28,23 @@ def main(model: Model):
 
     if model == Model.MVCNN:
         config = {
-            "batch_size": tune.choice([8, 16, 32, 64]),
-            "learning_rate": tune.loguniform(1e-5, 1e-1),
+            "batch_size": tune.choice([16, 32, 64]),
+            "learning_rate": tune.loguniform(1e-5, 1e-2),
             "weight_decay": tune.loguniform(1e-4, 1e-2),
             "cnn_name": tune.choice(["vgg11", "resnet34", "resnet50"]),
             "pretrained": tune.choice([True, False]),
-            "epochs": tune.choice([20, 30]),
-            "num_views": tune.choice([12])
+            "epochs": 30,
+            "num_views": 12
         }
 
         scheduler = ASHAScheduler(
             metric="val_balanced_accuracy_score",
-            mode="min",
-            max_t=30,
-            grace_period=1,
-            reduction_factor=2)
+            mode="max",
+            max_t=30
+        )
 
         reporter = CLIReporter(
             metric_columns=[
-                "train_loss",
-                "val_loss",
                 "train_balanced_accuracy_score",
                 "val_balanced_accuracy_score",
                 "training_iteration"
@@ -63,8 +59,12 @@ def main(model: Model):
         result = tune.run(
             train_func,
             resources_per_trial={"cpu": 8, "gpu": 1},
+            local_dir=log_dir,
             config=config,
-            num_samples=10,
+            mode="max",
+            metric="val_balanced_accuracy_score",
+            search_alg=OptunaSearch(),
+            num_samples=20,
             scheduler=scheduler,
             progress_reporter=reporter)
 
@@ -77,12 +77,10 @@ def main(model: Model):
     #                     0.001, 0.001,
     #                     log_dir, model_dir)
 
-    best_trial = result.get_best_trial("loss", "min", "last")
+    best_trial = result.get_best_trial("val_balanced_accuracy_score", "max", "all")
     print("Best trial config: {}".format(best_trial.config))
-    print("Best trial final validation loss: {}".format(
-        best_trial.last_result["loss"]))
-    print("Best trial final validation accuracy: {}".format(
-        best_trial.last_result["accuracy"]))
+    print("Best trial final validation accuracy (balanced): {}".format(
+        best_trial.last_result["val_balanced_accuracy_score"]))
 
 
 if __name__ == "__main__":

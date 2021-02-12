@@ -24,8 +24,10 @@ def _get_train_val_transforms(pretrained=True):
     ]
 
     if pretrained:
+        # Use ImageNet stats
         norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     else:
+        # Use IFCNet stats
         norm = transforms.Normalize(mean=[0.911, 0.911, 0.911], std=[0.148, 0.148, 0.148])
     
     train_transform.append(norm)
@@ -84,7 +86,11 @@ def _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrai
 def _train_multi_view(svcnn, data_root, class_names, epochs, batch_size,
                     learning_rate, weight_decay, checkpoint_dir,
                     pretrained=True, cnn_name="vgg11", num_views=12):
-    model = MVCNN(svcnn, nclasses=len(class_names), num_views=num_views)
+    model = MVCNN(svcnn, nclasses=len(class_names), num_views=num_views, cnn_name=cnn_name)
+
+    # Can remove SVCNN after layers have been copied into MVCNN to safe memory
+    del svcnn
+
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     train_loader, val_loader = _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrained=pretrained)
 
@@ -95,10 +101,7 @@ def _train_multi_view(svcnn, data_root, class_names, epochs, batch_size,
     return model
 
 
-def train_mvcnn(config, checkpoint_dir=None, data_root=None, class_names=None):
-    if checkpoint_dir is None:
-        checkpoint_dir = Path("./models/MVCNN")
-        
+def train_mvcnn(config, checkpoint_dir=None, data_root=None, class_names=None):        
     batch_size = config["batch_size"]
     learning_rate = config["learning_rate"]
     weight_decay = config["weight_decay"]
@@ -110,7 +113,6 @@ def train_mvcnn(config, checkpoint_dir=None, data_root=None, class_names=None):
     svcnn = _pretrain_single_view(data_root, class_names, epochs, batch_size,
                                 learning_rate, weight_decay, checkpoint_dir,
                                 pretrained=pretrained, cnn_name=cnn_name)
-    mvcnn = _train_multi_view(svcnn, data_root, class_names, epochs, int(batch_size/num_views),
+    _train_multi_view(svcnn, data_root, class_names, epochs, int(batch_size/num_views),
                             learning_rate, weight_decay, checkpoint_dir,
                             pretrained=pretrained, cnn_name=cnn_name, num_views=num_views)
-    return mvcnn
