@@ -37,45 +37,64 @@ def main(model: Model):
             "num_views": 12
         }
 
-        scheduler = ASHAScheduler(
-            metric="val_balanced_accuracy_score",
-            mode="max",
-            max_t=30
-        )
-
-        reporter = CLIReporter(
-            metric_columns=[
-                "train_balanced_accuracy_score",
-                "val_balanced_accuracy_score",
-                "training_iteration"
-            ])
-
         train_func = partial(
             train_mvcnn,
             data_root=data_root,
             class_names=class_names
         )
+    elif model == Model.DGCNN:
+        config = {
+            "batch_size": 8,
+            "learning_rate": tune.loguniform(1e-4, 1e-2),
+            "weight_decay": tune.loguniform(1e-4, 1e-2),
+            "k": tune.choice([20, 30, 40]),
+            "embedding_dim": tune.choice([516, 1024, 2048]),
+            "dropout": tune.choice([0.25, 0.5]),
+            "epochs": 100
+        }
 
-        result = tune.run(
-            train_func,
-            resources_per_trial={"cpu": 8, "gpu": 1},
-            local_dir=log_dir,
-            config=config,
-            mode="max",
-            metric="val_balanced_accuracy_score",
-            search_alg=OptunaSearch(),
-            num_samples=20,
-            scheduler=scheduler,
-            progress_reporter=reporter)
+        train_func = partial(
+            train_dgcnn,
+            data_root=data_root,
+            class_names=class_names
+        )
+    elif model == Model.MeshNet:
+        config = {
+            "batch_size": tune.choice([32, 64]),
+            "learning_rate": tune.loguniform(1e-4, 1e-2),
+            "weight_decay": tune.loguniform(1e-4, 1e-2),
+            "num_kernel": tune.choice([64]),
+            "sigma": tune.choice([0.2]),
+            "aggregation_method": tune.choice(["Concat", "Max", "Average"]),
+            "epochs": 100
+        }
 
-    # elif model == Model.DGCNN:
-    #     train_dgcnn(data_root, class_names, 8,
-    #                 0.001, 0.001,
-    #                 log_dir, model_dir)
-    # elif model == Model.MeshNet:
-    #     train_meshnet(data_root, class_names, 64,
-    #                     0.001, 0.001,
-    #                     log_dir, model_dir)
+        train_func = partial(
+            train_meshnet,
+            data_root=data_root,
+            class_names=class_names
+        )
+
+    scheduler = ASHAScheduler()
+
+    reporter = CLIReporter(
+        metric_columns=[
+            "train_balanced_accuracy_score",
+            "val_balanced_accuracy_score",
+            "training_iteration"
+        ])
+
+    result = tune.run(
+        train_func,
+        resources_per_trial={"cpu": 8, "gpu": 1},
+        local_dir=log_dir,
+        config=config,
+        mode="max",
+        metric="val_balanced_accuracy_score",
+        search_alg=OptunaSearch(),
+        num_samples=20,
+        scheduler=scheduler,
+        progress_reporter=reporter)
 
     best_trial = result.get_best_trial("val_balanced_accuracy_score", "max", "all")
     print("Best trial config: {}".format(best_trial.config))

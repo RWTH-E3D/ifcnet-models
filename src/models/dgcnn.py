@@ -42,9 +42,9 @@ def _translate_pointcloud(pointcloud):
     return translated_pointcloud
 
 
-def _train(data_root, class_names, batch_size,
+def _train(data_root, class_names, epochs, batch_size,
         learning_rate, weight_decay,
-        log_dir, model_dir):
+        k, embedding_dim, dropout, checkpoint_dir):
     train_dataset = IFCNetPly(data_root, class_names, partition="train")
     val_dataset = IFCNetPly(data_root, class_names, partition="train")
     
@@ -57,30 +57,28 @@ def _train(data_root, class_names, batch_size,
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
 
-    model = DGCNN(0.5, 40, 1024, len(class_names))
+    model = DGCNN(dropout, k, embedding_dim, len(class_names))
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     trainer = Trainer(model, train_loader, val_loader, class_names,
-        optimizer, _cal_loss, log_dir, model_dir, "DGCNN",
+        optimizer, _cal_loss, checkpoint_dir, "DGCNN",
         after_load_cb=lambda x: x.permute(0, 2, 1))
-    trainer.train(100)
+    trainer.train(epochs)
     return model
 
 
-def train_dgcnn(data_root, class_names, batch_size,
-                learning_rate, weight_decay,
-                log_dir, model_dir):
+def train_dgcnn(config, checkpoint_dir=None, data_root=None, class_names=None):
 
-    with (log_dir/"config.json").open("w") as f:
-        json.dump({
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "weight_decay": weight_decay,
-            "data_root": str(data_root)
-        }, f)
+    batch_size = config["batch_size"]
+    learning_rate = config["learning_rate"]
+    weight_decay = config["weight_decay"]
+    k = config["k"]
+    embedding_dim = config["embedding_dim"]
+    dropout = config["dropout"]
+    epochs = config["epochs"]
 
-    model = _train(data_root, class_names, batch_size,
-                    learning_rate, weight_decay,
-                    log_dir, model_dir)
-    return model
+    _train(data_root, class_names, epochs,
+        batch_size, learning_rate,
+        weight_decay, k, embedding_dim, dropout,
+        checkpoint_dir)

@@ -97,7 +97,7 @@ def _train_multi_view(svcnn, data_root, class_names, epochs, batch_size,
     trainer = Trainer(model, train_loader, val_loader, class_names,
         optimizer, nn.CrossEntropyLoss(), checkpoint_dir, "MVCNN",
         after_load_cb=lambda x: x.view(-1, *x.shape[-3:]))
-    trainer.train(epochs)
+    trainer.train(epochs, global_step=epochs)
     return model
 
 

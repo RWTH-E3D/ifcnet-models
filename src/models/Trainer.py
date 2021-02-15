@@ -32,9 +32,9 @@ class Trainer:
 
         self.load()
 
-    def train(self, epochs):
+    def train(self, epochs, global_step=0):
         
-        for epoch in range(epochs):
+        for epoch in range(global_step, epochs + global_step):
             self.model.train()
             all_probs = []
             all_labels = []
