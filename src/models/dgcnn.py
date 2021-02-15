@@ -34,18 +34,32 @@ def _cal_loss(pred, gold, smoothing=True):
     return loss
 
 
-def _translate_pointcloud(pointcloud):
-    xyz1 = np.random.uniform(low=2./3., high=3./2., size=[3])
-    xyz2 = np.random.uniform(low=-0.2, high=0.2, size=[3])
-       
-    translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
-    return translated_pointcloud
+class TranslatePointCloud:
+
+    def __call__(self, pointcloud):
+        xyz1 = np.random.uniform(low=2./3., high=3./2., size=[3])
+        xyz2 = np.random.uniform(low=-0.2, high=0.2, size=[3])
+            
+        translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
+        return translated_pointcloud
+
+
+class ShufflePointCloud:
+
+    def __call__(self, pointcloud):
+        return np.random.shuffle(pointcloud)
 
 
 def _train(data_root, class_names, epochs, batch_size,
         learning_rate, weight_decay,
         k, embedding_dim, dropout, checkpoint_dir):
-    train_dataset = IFCNetPly(data_root, class_names, partition="train")
+
+    train_tranform = transforms.Compose([
+        TranslatePointCloud(),
+        ShufflePointCloud()
+    ])
+
+    train_dataset = IFCNetPly(data_root, class_names, partition="train", transform=train_tranform)
     val_dataset = IFCNetPly(data_root, class_names, partition="train")
     
     np.random.seed(42)
