@@ -1,4 +1,5 @@
 import json
+from argparse import ArgumentParser
 from functools import partial
 from enum import Enum
 from pathlib import Path
@@ -18,7 +19,9 @@ class Model(str, Enum):
     MeshNet = "MeshNet"
 
 
-def main(model: Model):
+def main(args):
+    model = args.model
+    config_file = args.config_file
     log_dir = Path(f"./logs/{model.value}")
     log_dir.mkdir(exist_ok=True, parents=True)
     data_root = Path(f"./data/processed/{model.value}/IFCNetCore").absolute()
@@ -40,7 +43,8 @@ def main(model: Model):
         train_func = partial(
             train_mvcnn,
             data_root=data_root,
-            class_names=class_names
+            class_names=class_names,
+            eval_on_test=config_file is not None
         )
     elif model == Model.DGCNN:
         config = {
@@ -50,32 +54,38 @@ def main(model: Model):
             "k": tune.choice([20, 30, 40]),
             "embedding_dim": tune.choice([516, 1024, 2048]),
             "dropout": tune.choice([0.25, 0.5]),
-            "epochs": 100
+            "epochs": tune.choice([100, 150, 200, 250])
         }
 
         train_func = partial(
             train_dgcnn,
             data_root=data_root,
-            class_names=class_names
+            class_names=class_names,
+            eval_on_test=config_file is not None
         )
     elif model == Model.MeshNet:
         config = {
-            "batch_size": tune.choice([32, 64]),
+            "batch_size": tune.choice([16, 32]),
             "learning_rate": tune.loguniform(1e-4, 1e-2),
             "weight_decay": tune.loguniform(1e-4, 1e-2),
-            "num_kernel": tune.choice([64]),
-            "sigma": tune.choice([0.2]),
+            "num_kernel": tune.choice([32, 64]),
+            "sigma": tune.choice([0.1, 0.2, 0.3]),
             "aggregation_method": tune.choice(["Concat", "Max", "Average"]),
-            "epochs": 100
+            "epochs": 150
         }
 
         train_func = partial(
             train_meshnet,
             data_root=data_root,
-            class_names=class_names
+            class_names=class_names,
+            eval_on_test=config_file is not None
         )
 
-    scheduler = ASHAScheduler()
+    if config_file:
+        with config_file.open("r") as f:
+            config = json.load(f)
+
+    scheduler = ASHAScheduler(max_t=250)
 
     reporter = CLIReporter(
         metric_columns=[
@@ -91,16 +101,21 @@ def main(model: Model):
         config=config,
         mode="max",
         metric="val_balanced_accuracy_score",
-        search_alg=OptunaSearch(),
-        num_samples=20,
-        scheduler=scheduler,
+        search_alg=OptunaSearch() if config_file is not None else None,
+        num_samples=1 if config_file is not None else 20,
+        scheduler=scheduler if config_file is not None else None,
         progress_reporter=reporter)
 
-    best_trial = result.get_best_trial("val_balanced_accuracy_score", "max", "all")
+    best_trial = result.get_best_trial("val_balanced_accuracy_score", "max", "last")
     print("Best trial config: {}".format(best_trial.config))
     print("Best trial final validation accuracy (balanced): {}".format(
         best_trial.last_result["val_balanced_accuracy_score"]))
 
 
 if __name__ == "__main__":
-    main(Model.MVCNN)
+    parser = ArgumentParser()
+    parser.add_argument("model", type=Model, choices=list(Model))
+    parser.add_argument("--config_file", default=None, type=Path)
+    args = parser.parse_args()
+
+    main(args)

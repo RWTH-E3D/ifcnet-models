@@ -113,10 +113,15 @@ def _train(data_root, class_names, epochs, batch_size,
             learning_rate, weight_decay,
             num_kernel, sigma,
             aggregation_method,
-            checkpoint_dir):
+            checkpoint_dir, eval_on_test=False):
 
     train_dataset = IFCNetNumpy(data_root, 2048, class_names, partition="train")
-    val_dataset = IFCNetNumpy(data_root, 2048, class_names, partition="train")
+    val_dataset = IFCNetNumpy(
+        data_root,
+        2048,
+        class_names,
+        partition="train" if not eval_on_test else "test"
+    )
     
     np.random.seed(42)
     perm = np.random.permutation(range(len(train_dataset)))
@@ -127,7 +132,7 @@ def _train(data_root, class_names, epochs, batch_size,
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
 
-    model = MeshNet(num_kernel, sigma, aggregation_method)
+    model = MeshNet(num_kernel, sigma, aggregation_method, output_channels=len(class_names))
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
@@ -137,7 +142,7 @@ def _train(data_root, class_names, epochs, batch_size,
     return model
 
 
-def train_meshnet(config, checkpoint_dir=None, data_root=None, class_names=None):
+def train_meshnet(config, checkpoint_dir=None, data_root=None, class_names=None, eval_on_test=False):
 
     batch_size = config["batch_size"]
     learning_rate = config["learning_rate"]
@@ -151,4 +156,4 @@ def train_meshnet(config, checkpoint_dir=None, data_root=None, class_names=None)
                     learning_rate, weight_decay,
                     num_kernel, sigma,
                     aggregation_method,
-                    checkpoint_dir)
+                    checkpoint_dir, eval_on_test=eval_on_test)

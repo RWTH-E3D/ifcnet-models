@@ -38,10 +38,16 @@ def _get_train_val_transforms(pretrained=True):
     return train_transform, val_transform
 
 
-def _get_svcnn_loaders(data_root, class_names, batch_size, pretrained=True):
+def _get_svcnn_loaders(data_root, class_names, batch_size, pretrained=True, eval_on_test=False):
     train_transform, val_transform = _get_train_val_transforms(pretrained=pretrained)
+
     train_dataset = SingleImgDataset(data_root, class_names, partition="train", transform=train_transform)
-    val_dataset = SingleImgDataset(data_root, class_names, partition="train", transform=val_transform)
+    val_dataset = SingleImgDataset(
+        data_root,
+        class_names,
+        partition="train" if not eval_on_test else "test",
+        transform=val_transform
+    )
     
     np.random.seed(42)
     perm = np.random.permutation(range(len(train_dataset)))
@@ -56,10 +62,11 @@ def _get_svcnn_loaders(data_root, class_names, batch_size, pretrained=True):
 
 def _pretrain_single_view(data_root, class_names, epochs, batch_size,
                         learning_rate, weight_decay, checkpoint_dir,
-                        pretrained=True, cnn_name="vgg11"):
+                        pretrained=True, cnn_name="vgg11", eval_on_test=False):
     model = SVCNN(nclasses=len(class_names), pretrained=pretrained, cnn_name=cnn_name)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    train_loader, val_loader = _get_svcnn_loaders(data_root, class_names, batch_size, pretrained)
+    train_loader, val_loader = _get_svcnn_loaders(data_root, class_names, batch_size,
+                                                    pretrained=pretrained, eval_on_test=eval_on_test)
 
     trainer = Trainer(model, train_loader, val_loader, class_names,
         optimizer, nn.CrossEntropyLoss(), checkpoint_dir, "SVCNN")
@@ -67,10 +74,16 @@ def _pretrain_single_view(data_root, class_names, epochs, batch_size,
     return model
 
 
-def _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrained=True):
+def _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrained=True, eval_on_test=False):
     train_transform, val_transform = _get_train_val_transforms(pretrained=pretrained)
     train_dataset = MultiviewImgDataset(data_root, class_names, num_views, partition="train", transform=train_transform)
-    val_dataset = MultiviewImgDataset(data_root, class_names, num_views, partition="train", transform=val_transform)
+    val_dataset = MultiviewImgDataset(
+        data_root,
+        class_names,
+        num_views,
+        partition="train" if not eval_on_test else "test",
+        transform=val_transform
+    )
 
     np.random.seed(42)
     perm = np.random.permutation(range(len(train_dataset)))
@@ -85,14 +98,15 @@ def _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrai
 
 def _train_multi_view(svcnn, data_root, class_names, epochs, batch_size,
                     learning_rate, weight_decay, checkpoint_dir,
-                    pretrained=True, cnn_name="vgg11", num_views=12):
+                    pretrained=True, cnn_name="vgg11", num_views=12, eval_on_test=False):
     model = MVCNN(svcnn, nclasses=len(class_names), num_views=num_views, cnn_name=cnn_name)
 
     # Can remove SVCNN after layers have been copied into MVCNN to safe memory
     del svcnn
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    train_loader, val_loader = _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrained=pretrained)
+    train_loader, val_loader = _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12,
+                                                    pretrained=pretrained, eval_on_test=eval_on_test)
 
     trainer = Trainer(model, train_loader, val_loader, class_names,
         optimizer, nn.CrossEntropyLoss(), checkpoint_dir, "MVCNN",
@@ -101,7 +115,7 @@ def _train_multi_view(svcnn, data_root, class_names, epochs, batch_size,
     return model
 
 
-def train_mvcnn(config, checkpoint_dir=None, data_root=None, class_names=None):        
+def train_mvcnn(config, checkpoint_dir=None, data_root=None, class_names=None, eval_on_test=False):        
     batch_size = config["batch_size"]
     learning_rate = config["learning_rate"]
     weight_decay = config["weight_decay"]
@@ -112,7 +126,7 @@ def train_mvcnn(config, checkpoint_dir=None, data_root=None, class_names=None):
 
     svcnn = _pretrain_single_view(data_root, class_names, epochs, batch_size,
                                 learning_rate, weight_decay, checkpoint_dir,
-                                pretrained=pretrained, cnn_name=cnn_name)
+                                pretrained=pretrained, cnn_name=cnn_name, eval_on_test=eval_on_test)
     _train_multi_view(svcnn, data_root, class_names, epochs, int(batch_size/num_views),
                             learning_rate, weight_decay, checkpoint_dir,
-                            pretrained=pretrained, cnn_name=cnn_name, num_views=num_views)
+                            pretrained=pretrained, cnn_name=cnn_name, num_views=num_views, eval_on_test=eval_on_test)

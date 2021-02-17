@@ -54,7 +54,7 @@ class ShufflePointCloud:
 
 def _train(data_root, class_names, epochs, batch_size,
         learning_rate, weight_decay,
-        k, embedding_dim, dropout, checkpoint_dir):
+        k, embedding_dim, dropout, checkpoint_dir, eval_on_test=False):
 
     train_tranform = transforms.Compose([
         TranslatePointCloud(),
@@ -62,7 +62,11 @@ def _train(data_root, class_names, epochs, batch_size,
     ])
 
     train_dataset = IFCNetPly(data_root, class_names, partition="train", transform=train_tranform)
-    val_dataset = IFCNetPly(data_root, class_names, partition="train")
+    val_dataset = IFCNetPly(
+        data_root,
+        class_names,
+        partition="train" if not eval_on_test else "test"
+    )
     
     np.random.seed(42)
     perm = np.random.permutation(range(len(train_dataset)))
@@ -84,7 +88,7 @@ def _train(data_root, class_names, epochs, batch_size,
     return model
 
 
-def train_dgcnn(config, checkpoint_dir=None, data_root=None, class_names=None):
+def train_dgcnn(config, checkpoint_dir=None, data_root=None, class_names=None, eval_on_test=False):
 
     batch_size = config["batch_size"]
     learning_rate = config["learning_rate"]
@@ -97,4 +101,4 @@ def train_dgcnn(config, checkpoint_dir=None, data_root=None, class_names=None):
     _train(data_root, class_names, epochs,
         batch_size, learning_rate,
         weight_decay, k, embedding_dim, dropout,
-        checkpoint_dir)
+        checkpoint_dir, eval_on_test=eval_on_test)
