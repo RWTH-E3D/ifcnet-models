@@ -47,7 +47,9 @@ class TranslatePointCloud:
 class ShufflePointCloud:
 
     def __call__(self, pointcloud):
-        return np.random.shuffle(pointcloud)
+        copy = pointcloud.copy()
+        np.random.shuffle(copy)
+        return copy
 
 
 def _train(data_root, class_names, epochs, batch_size,
