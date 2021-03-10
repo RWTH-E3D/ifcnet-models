@@ -10,6 +10,7 @@ from src.data import IFCNetPly
 from src.models.Trainer import Trainer
 from src.models.models import DGCNN
 import numpy as np
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Subset
 from pathlib import Path
 
@@ -50,31 +51,34 @@ class ShufflePointCloud:
         copy = pointcloud.copy()
         np.random.shuffle(copy)
         return copy
-
+    
 
 def _train(data_root, class_names, epochs, batch_size,
         learning_rate, weight_decay,
         k, embedding_dim, dropout, checkpoint_dir, eval_on_test=False):
 
-    train_tranform = transforms.Compose([
+    train_transform = transforms.Compose([
         TranslatePointCloud(),
         ShufflePointCloud()
     ])
-
-    train_dataset = IFCNetPly(data_root, class_names, partition="train", transform=train_tranform)
-    val_dataset = IFCNetPly(
-        data_root,
-        class_names,
-        partition="train" if not eval_on_test else "test"
-    )
     
-    np.random.seed(42)
-    perm = np.random.permutation(range(len(train_dataset)))
-    train_len = int(0.7 * len(train_dataset))
-    train_dataset = Subset(train_dataset, perm[:train_len])
-    val_dataset = Subset(val_dataset, perm[train_len:])
+    if eval_on_test:
+        train_dataset = IFCNetPly(data_root, class_names, partition="train", transform=train_transform)
+        val_dataset = IFCNetPly(data_root, class_names, partition="test")
+    else:
+        train_dataset = IFCNetPly(data_root, class_names, partition="train", transform=train_transform)
+        val_dataset = IFCNetPly(data_root, class_names, partition="train")
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+        np.random.seed(42)
+        perm = np.random.permutation(range(len(train_dataset)))
+        train_len = int(0.7 * len(train_dataset))
+        train_dataset = Subset(train_dataset, perm[:train_len])
+        val_dataset = Subset(val_dataset, perm[train_len:])
+    
+    print(f"Train Size: {len(train_dataset)}")
+    print(f"Val Size: {len(val_dataset)}")
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=8, shuffle=True, drop_last=len(train_dataset)%batch_size==1)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
 
     model = DGCNN(dropout, k, embedding_dim, len(class_names))

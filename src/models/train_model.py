@@ -31,11 +31,11 @@ def main(args):
 
     if model == Model.MVCNN:
         config = {
-            "batch_size": tune.choice([16, 32, 64]),
+            "batch_size": 64,
             "learning_rate": tune.loguniform(1e-5, 1e-2),
             "weight_decay": tune.loguniform(1e-4, 1e-2),
             "cnn_name": tune.choice(["vgg11", "resnet34", "resnet50"]),
-            "pretrained": tune.choice([True, False]),
+            "pretrained": True,
             "epochs": 30,
             "num_views": 12
         }
@@ -53,8 +53,8 @@ def main(args):
             "weight_decay": tune.loguniform(1e-4, 1e-2),
             "k": tune.choice([20, 30, 40]),
             "embedding_dim": tune.choice([516, 1024, 2048]),
-            "dropout": tune.choice([0.25, 0.5]),
-            "epochs": tune.choice([100, 150, 200, 250])
+            "dropout": 0.5,
+            "epochs": 250
         }
 
         train_func = partial(
@@ -65,7 +65,7 @@ def main(args):
         )
     elif model == Model.MeshNet:
         config = {
-            "batch_size": tune.choice([16, 32]),
+            "batch_size": tune.choice([8, 16, 32]),
             "learning_rate": tune.loguniform(1e-4, 1e-2),
             "weight_decay": tune.loguniform(1e-4, 1e-2),
             "num_kernel": tune.choice([32, 64]),
@@ -85,7 +85,7 @@ def main(args):
         with config_file.open("r") as f:
             config = json.load(f)
 
-    scheduler = ASHAScheduler(max_t=250)
+    scheduler = ASHAScheduler(max_t=250, grace_period=10)
 
     reporter = CLIReporter(
         metric_columns=[
@@ -101,9 +101,9 @@ def main(args):
         config=config,
         mode="max",
         metric="val_balanced_accuracy_score",
-        search_alg=OptunaSearch() if config_file is not None else None,
-        num_samples=1 if config_file is not None else 20,
-        scheduler=scheduler if config_file is not None else None,
+        search_alg=OptunaSearch() if config_file is None else None,
+        num_samples=20 if config_file is None else 1,
+        scheduler=scheduler if config_file is None else None,
         progress_reporter=reporter)
 
     best_trial = result.get_best_trial("val_balanced_accuracy_score", "max", "last")

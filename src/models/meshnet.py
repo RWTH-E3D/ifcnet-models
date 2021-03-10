@@ -115,20 +115,22 @@ def _train(data_root, class_names, epochs, batch_size,
             aggregation_method,
             checkpoint_dir, eval_on_test=False):
 
-    train_dataset = IFCNetNumpy(data_root, 2048, class_names, partition="train")
-    val_dataset = IFCNetNumpy(
-        data_root,
-        2048,
-        class_names,
-        partition="train" if not eval_on_test else "test"
-    )
-    
-    np.random.seed(42)
-    perm = np.random.permutation(range(len(train_dataset)))
-    train_len = int(0.7 * len(train_dataset))
-    train_dataset = Subset(train_dataset, perm[:train_len])
-    val_dataset = Subset(val_dataset, perm[train_len:])
+    if eval_on_test:
+        train_dataset = IFCNetNumpy(data_root, 2048, class_names, partition="train")
+        val_dataset = IFCNetNumpy(data_root, 2048, class_names, partition="test")
+    else:
+        train_dataset = IFCNetNumpy(data_root, 2048, class_names, partition="train")
+        val_dataset = IFCNetNumpy(data_root, 2048, class_names, partition="train")
 
+        np.random.seed(42)
+        perm = np.random.permutation(range(len(train_dataset)))
+        train_len = int(0.7 * len(train_dataset))
+        train_dataset = Subset(train_dataset, perm[:train_len])
+        val_dataset = Subset(val_dataset, perm[train_len:])
+
+    print(f"Train Size: {len(train_dataset)}")
+    print(f"Val Size: {len(val_dataset)}")
+        
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
 

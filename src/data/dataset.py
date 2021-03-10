@@ -7,19 +7,6 @@ from pathlib import Path
 from src.data.util import read_ply
 
 
-def translate_pointcloud(pointcloud):
-    xyz1 = np.random.uniform(low=2./3., high=3./2., size=[3])
-    xyz2 = np.random.uniform(low=-0.2, high=0.2, size=[3])
-       
-    translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
-    return translated_pointcloud
-
-
-def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.02):
-    N, C = pointcloud.shape
-    pointcloud += np.clip(sigma * np.random.randn(N, C), -1*clip, clip)
-    return pointcloud
-
 class IFCNetPly(Dataset):
 
     def __init__(self, data_root, class_names, partition="train", transform=None):
@@ -27,7 +14,7 @@ class IFCNetPly(Dataset):
         self.data_root = data_root
         self.class_names = class_names
         self.partition = partition
-        self.files = list(data_root.glob(f"**/{partition}/*.ply"))
+        self.files = sorted(data_root.glob(f"**/{partition}/*.ply"))
 
         self.cache = {}
 
@@ -57,7 +44,7 @@ class IFCNetNumpy(Dataset):
         self.data_root = data_root
         self.max_faces = max_faces
         self.partition = partition
-        self.files = list(data_root.glob(f"**/{partition}/*.npz"))
+        self.files = sorted(data_root.glob(f"**/{partition}/*.npz"))
         self.class_names = class_names
 
     def __getitem__(self, idx):
@@ -128,7 +115,7 @@ class SingleImgDataset(Dataset):
         self.transform = transform
         self.root_dir = root_dir
 
-        self.filepaths = list(root_dir.glob(f"**/{partition}/*.png"))
+        self.filepaths = sorted(root_dir.glob(f"**/{partition}/*.png"))
 
     def __len__(self):
         return len(self.filepaths)
@@ -143,21 +130,4 @@ class SingleImgDataset(Dataset):
             img = self.transform(img)
 
         return img, label
-
-if __name__ == "__main__":
-    import json
-    from torch.utils.data import DataLoader
-    from src.models.models import MeshNet
-    with open("IFCNetCore_Classes.json", "r") as f:
-        class_names = json.load(f)
-
-    max_faces = 106661
-    model = MeshNet(64, 0.2, "Concat")
-
-    train_dataset = IFCNetNumpy(Path("./data/processed/MeshNet/IFCNetCore"), max_faces,
-        class_names, partition="train")
-    train_loader = DataLoader(train_dataset, batch_size=8)
-
-    for data, labels in train_loader:
-        outputs = model(data)
         

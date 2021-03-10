@@ -1,0 +1,9 @@
+{
+  "batch_size": 64,
+  "cnn_name": "vgg11",
+  "epochs": 30,
+  "learning_rate": 1.3529557841712963e-05,
+  "num_views": 12,
+  "pretrained": true,
+  "weight_decay": 0.00019094898290886048
+}

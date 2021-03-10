@@ -1,0 +1,9 @@
+{
+  "aggregation_method": "Average",
+  "batch_size": 32,
+  "epochs": 150,
+  "learning_rate": 0.00012452802495458535,
+  "num_kernel": 64,
+  "sigma": 0.3,
+  "weight_decay": 0.0002855898536813576
+}

@@ -41,20 +41,22 @@ def _get_train_val_transforms(pretrained=True):
 def _get_svcnn_loaders(data_root, class_names, batch_size, pretrained=True, eval_on_test=False):
     train_transform, val_transform = _get_train_val_transforms(pretrained=pretrained)
 
-    train_dataset = SingleImgDataset(data_root, class_names, partition="train", transform=train_transform)
-    val_dataset = SingleImgDataset(
-        data_root,
-        class_names,
-        partition="train" if not eval_on_test else "test",
-        transform=val_transform
-    )
-    
-    np.random.seed(42)
-    perm = np.random.permutation(range(len(train_dataset)))
-    train_len = int(0.7 * len(train_dataset))
-    train_dataset = Subset(train_dataset, perm[:train_len])
-    val_dataset = Subset(val_dataset, perm[train_len:])
+    if eval_on_test:
+        train_dataset = SingleImgDataset(data_root, class_names, partition="train", transform=train_transform)
+        val_dataset = SingleImgDataset(data_root, class_names, partition="test", transform=val_transform)
+    else:
+        train_dataset = SingleImgDataset(data_root, class_names, partition="train", transform=train_transform)
+        val_dataset = SingleImgDataset(data_root, class_names, partition="train", transform=val_transform)
 
+        np.random.seed(42)
+        perm = np.random.permutation(range(len(train_dataset)))
+        train_len = int(0.7 * len(train_dataset))
+        train_dataset = Subset(train_dataset, perm[:train_len])
+        val_dataset = Subset(val_dataset, perm[train_len:])
+
+    print(f"Train Size: {len(train_dataset)}")
+    print(f"Val Size: {len(val_dataset)}")
+        
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
     return train_loader, val_loader
@@ -76,21 +78,23 @@ def _pretrain_single_view(data_root, class_names, epochs, batch_size,
 
 def _get_mvcnn_loaders(data_root, class_names, batch_size, num_views=12, pretrained=True, eval_on_test=False):
     train_transform, val_transform = _get_train_val_transforms(pretrained=pretrained)
-    train_dataset = MultiviewImgDataset(data_root, class_names, num_views, partition="train", transform=train_transform)
-    val_dataset = MultiviewImgDataset(
-        data_root,
-        class_names,
-        num_views,
-        partition="train" if not eval_on_test else "test",
-        transform=val_transform
-    )
+    
+    if eval_on_test:
+        train_dataset = MultiviewImgDataset(data_root, class_names, num_views, partition="train", transform=train_transform)
+        val_dataset = MultiviewImgDataset(data_root, class_names, num_views, partition="test", transform=val_transform)
+    else:
+        train_dataset = MultiviewImgDataset(data_root, class_names, num_views, partition="train", transform=train_transform)
+        val_dataset = MultiviewImgDataset(data_root, class_names, num_views, partition="train", transform=val_transform)
 
-    np.random.seed(42)
-    perm = np.random.permutation(range(len(train_dataset)))
-    train_len = int(0.7 * len(train_dataset))
-    train_dataset = Subset(train_dataset, perm[:train_len])
-    val_dataset = Subset(val_dataset, perm[train_len:])
+        np.random.seed(42)
+        perm = np.random.permutation(range(len(train_dataset)))
+        train_len = int(0.7 * len(train_dataset))
+        train_dataset = Subset(train_dataset, perm[:train_len])
+        val_dataset = Subset(val_dataset, perm[train_len:])
 
+    print(f"Train Size: {len(train_dataset)}")
+    print(f"Val Size: {len(val_dataset)}")
+        
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
     return train_loader, val_loader

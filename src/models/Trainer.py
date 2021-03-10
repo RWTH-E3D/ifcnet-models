@@ -52,7 +52,7 @@ class Trainer:
                 loss = self.loss_fn(outputs, labels)
                 running_loss += loss.item()
                 
-                probs = F.softmax(outputs, dim=0)
+                probs = F.softmax(outputs, dim=1)
                 all_probs.append(probs.cpu().detach().numpy())
                 all_labels.append(labels.cpu().numpy())
 
@@ -86,7 +86,7 @@ class Trainer:
                 loss = self.loss_fn(outputs, labels)
                 running_loss += loss.item()
                 
-                probs = F.softmax(outputs, dim=0)
+                probs = F.softmax(outputs, dim=1)
                 
                 all_probs.append(probs.cpu().numpy())
                 all_labels.append(labels.cpu().numpy())
