@@ -10,6 +10,7 @@ from src.data import IFCNetPly
 from src.models.Trainer import Trainer
 from src.models.models import DGCNN
 import numpy as np
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Subset
 from pathlib import Path
 
@@ -34,53 +35,74 @@ def _cal_loss(pred, gold, smoothing=True):
     return loss
 
 
-def _translate_pointcloud(pointcloud):
-    xyz1 = np.random.uniform(low=2./3., high=3./2., size=[3])
-    xyz2 = np.random.uniform(low=-0.2, high=0.2, size=[3])
-       
-    translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
-    return translated_pointcloud
+class TranslatePointCloud:
+
+    def __call__(self, pointcloud):
+        xyz1 = np.random.uniform(low=2./3., high=3./2., size=[3])
+        xyz2 = np.random.uniform(low=-0.2, high=0.2, size=[3])
+            
+        translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
+        return translated_pointcloud
 
 
-def _train(data_root, class_names, batch_size,
-        learning_rate, weight_decay,
-        log_dir, model_dir):
-    train_dataset = IFCNetPly(data_root, class_names, partition="train")
-    val_dataset = IFCNetPly(data_root, class_names, partition="train")
+class ShufflePointCloud:
+
+    def __call__(self, pointcloud):
+        copy = pointcloud.copy()
+        np.random.shuffle(copy)
+        return copy
     
-    np.random.seed(42)
-    perm = np.random.permutation(range(len(train_dataset)))
-    train_len = int(0.7 * len(train_dataset))
-    train_dataset = Subset(train_dataset, perm[:train_len])
-    val_dataset = Subset(val_dataset, perm[train_len:])
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+def _train(data_root, class_names, epochs, batch_size,
+        learning_rate, weight_decay,
+        k, embedding_dim, dropout, checkpoint_dir, eval_on_test=False):
+
+    train_transform = transforms.Compose([
+        TranslatePointCloud(),
+        ShufflePointCloud()
+    ])
+    
+    if eval_on_test:
+        train_dataset = IFCNetPly(data_root, class_names, partition="train", transform=train_transform)
+        val_dataset = IFCNetPly(data_root, class_names, partition="test")
+    else:
+        train_dataset = IFCNetPly(data_root, class_names, partition="train", transform=train_transform)
+        val_dataset = IFCNetPly(data_root, class_names, partition="train")
+
+        np.random.seed(42)
+        perm = np.random.permutation(range(len(train_dataset)))
+        train_len = int(0.7 * len(train_dataset))
+        train_dataset = Subset(train_dataset, perm[:train_len])
+        val_dataset = Subset(val_dataset, perm[train_len:])
+    
+    print(f"Train Size: {len(train_dataset)}")
+    print(f"Val Size: {len(val_dataset)}")
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=8, shuffle=True, drop_last=len(train_dataset)%batch_size==1)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=8)
 
-    model = DGCNN(0.5, 40, 1024, len(class_names))
+    model = DGCNN(dropout, k, embedding_dim, len(class_names))
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     trainer = Trainer(model, train_loader, val_loader, class_names,
-        optimizer, _cal_loss, log_dir, model_dir, "DGCNN",
+        optimizer, _cal_loss, checkpoint_dir, "DGCNN",
         after_load_cb=lambda x: x.permute(0, 2, 1))
-    trainer.train(100)
+    trainer.train(epochs)
     return model
 
 
-def train_dgcnn(data_root, class_names, batch_size,
-                learning_rate, weight_decay,
-                log_dir, model_dir):
+def train_dgcnn(config, checkpoint_dir=None, data_root=None, class_names=None, eval_on_test=False):
 
-    with (log_dir/"config.json").open("w") as f:
-        json.dump({
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "weight_decay": weight_decay,
-            "data_root": str(data_root)
-        }, f)
+    batch_size = config["batch_size"]
+    learning_rate = config["learning_rate"]
+    weight_decay = config["weight_decay"]
+    k = config["k"]
+    embedding_dim = config["embedding_dim"]
+    dropout = config["dropout"]
+    epochs = config["epochs"]
 
-    model = _train(data_root, class_names, batch_size,
-                    learning_rate, weight_decay,
-                    log_dir, model_dir)
-    return model
+    _train(data_root, class_names, epochs,
+        batch_size, learning_rate,
+        weight_decay, k, embedding_dim, dropout,
+        checkpoint_dir, eval_on_test=eval_on_test)

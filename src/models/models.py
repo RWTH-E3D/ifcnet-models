@@ -362,7 +362,7 @@ class MeshConvolution(nn.Module):
 
 class MeshNet(Model):
 
-    def __init__(self, num_kernel, sigma, aggregation_method, require_fea=True):
+    def __init__(self, num_kernel, sigma, aggregation_method, require_fea=False, output_channels=40):
         super(MeshNet, self).__init__()
         self.require_fea = require_fea
 
@@ -387,7 +387,7 @@ class MeshNet(Model):
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Dropout(p=0.5),
-            nn.Linear(256, 40)
+            nn.Linear(256, output_channels)
         )
 
     def forward(self, x):

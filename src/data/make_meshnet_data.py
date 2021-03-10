@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 
-def simplify_mesh(path, output_path, num_faces=1024):
+def simplify_mesh(path, output_path, num_faces=2048):
     import meshlabxml as mlx
     topology = mlx.files.measure_topology(str(path))
     if topology["face_num"] <= num_faces:
@@ -13,7 +13,7 @@ def simplify_mesh(path, output_path, num_faces=1024):
         return
     
     script = mlx.FilterScript(file_in=str(path), file_out=str(output_path))
-    mlx.remesh.simplify(script, texture=False, faces=num_faces)
+    mlx.remesh.simplify(script, texture=False, faces=num_faces, preserve_topology=False)
     script.run_script()
 
 
@@ -109,5 +109,5 @@ def make_dataset():
 
 
 if __name__ == "__main__":
-    simplify_models()
-    #make_dataset()
+    #simplify_models()
+    make_dataset()

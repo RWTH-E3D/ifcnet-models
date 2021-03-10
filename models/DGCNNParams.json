@@ -1,0 +1,9 @@
+{
+  "batch_size": 8,
+  "dropout": 0.5,
+  "embedding_dim": 1024,
+  "epochs": 250,
+  "k": 40,
+  "learning_rate": 0.0007717280977051857,
+  "weight_decay": 0.00032568320727539135
+}
