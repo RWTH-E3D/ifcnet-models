@@ -68,4 +68,6 @@ The code for the neural networks is based on the implementations of the original
 * [jongchyisu](https://github.com/jongchyisu/mvcnn_pytorch) for MVCNN
 * [iMoonLab](https://github.com/iMoonLab/MeshNet) for MeshNet
 
+Big thanks goes to [xeolabs](https://github.com/xeolabs) for the [xeokit SDK](https://github.com/xeokit/xeokit-sdk), which is used in the [viewer](https://ifcnet.e3d.rwth-aachen.de/).
+
 The structure of this repository is loosely based on the [cookiecutter data science project template](https://drivendata.github.io/cookiecutter-data-science/)
