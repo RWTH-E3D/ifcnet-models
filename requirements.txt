@@ -10,6 +10,8 @@ python-dotenv>=0.5.1
 tensorboard
 pandas
 sklearn
+jupyter
 matplotlib
-ray[tune]
-optune==2.3.0
+seaborn
+ray[tune]==1.2.0
+optuna==2.3.0
