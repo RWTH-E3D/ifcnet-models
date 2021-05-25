@@ -1,57 +1,71 @@
-ifcnet-models
+IFCNet
 ==============================
 
-Neural Network Models for the IFCNet Dataset
+Neural Network Models for the [IFCNet Dataset](https://ifcnet.e3d.rwth-aachen.de/)
 
-Project Organization
-------------
+## Installation and Training
 
-    ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
-    ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
-    │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
-    │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
-    │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
-    │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
-    │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.readthedocs.io
+Make sure you have PyTorch installed. The code in this repository was developed and tested with:
 
+* Python 3.8.5
+* PyTorch 1.7.1+cu110
+* Ubuntu 20.04
 
---------
+```bash
+git clone https://github.com/cemunds/ifcnet-models.git
+cd ifcnet-models
+```
 
-<p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
+It is recommended to create a new virtual environment before installing the dependencies with the following command:
+
+```bash
+pip install -r requirements.txt
+```
+
+Download the data for the model you want to train and place them in the corresponding data folder:
+
+* [MVCNN](https://ifcnet.e3d.rwth-aachen.de/static/IFCNetCorePng.7z)
+* [DGCNN](https://ifcnet.e3d.rwth-aachen.de/static/IFCNetCorePly.7z)
+* [MeshNet](https://ifcnet.e3d.rwth-aachen.de/static/IFCNetCoreNpz.7z)
+
+For example, for MVCNN:
+```bash
+mkdir -p data/processed/MVCNN
+cd data/processed/MVCNN
+wget https://ifcnet.e3d.rwth-aachen.de/static/IFCNetCorePng.7z
+7z x IFCNetCorePng.7z
+```
+
+Navigate back to the root directory of the project and execute the training script.
+```bash
+cd ../../..
+python src/models/train_model.py MVCNN
+```
+Running the training script like this will perform a hyperparameter search using Ray Tune and Optuna. If you want to use a fixed set of hyperparameters, you can specify the path to a configuration JSON file with the `--config_file` flag. For the format of the configuration file, please refer to the files included with the pre-trained models.
+
+*Warning:* Performing the hyperparameter search for MVCNN consumes a lot of disk space, as currently the model is saved to disk after every epoch and some of the backbone models (e.g. vgg11) are very large. I intend to change the saving behavior in the future.
+
+## Evaluation
+
+The pre-trained models can be downloaded here:
+* [MVCNN](https://ifcnet.e3d.rwth-aachen.de/static/mvcnn_model.7z)
+* [DGCNN](https://ifcnet.e3d.rwth-aachen.de/static/dgcnn_model.7z)
+* [MeshNet](https://ifcnet.e3d.rwth-aachen.de/static/meshnet_model.7z)
+
+Download and unzip the models into the `models` directory:
+
+```bash
+mkdir models
+cd models
+wget https://ifcnet.e3d.rwth-aachen.de/static/mvcnn_model.7z
+7z x mvcnn_model.7z
+```
+Now you can start a Jupyter Notebook server and run the notebook for the corresponding model.
+
+## Acknowledgements
+The code for the neural networks is based on the implementations of the original publications, but had to be updated for recent PyTorch versions:
+* [WangYueFt](https://github.com/WangYueFt/dgcnn) for DGCNN
+* [jongchyisu](https://github.com/jongchyisu/mvcnn_pytorch) for MVCNN
+* [iMoonLab](https://github.com/iMoonLab/MeshNet) for MeshNet
+
+The structure of this repository is loosely based on the [cookiecutter data science project template](https://drivendata.github.io/cookiecutter-data-science/)
