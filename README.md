@@ -62,6 +62,17 @@ wget https://ifcnet.e3d.rwth-aachen.de/static/mvcnn_model.7z
 ```
 Now you can start a Jupyter Notebook server and run the notebook for the corresponding model.
 
+## Citation
+If you use the IFCNet dataset or code please cite:
+```
+@inproceedings{emunds2021ifcnet,
+  title={IFCNet: A Benchmark Dataset for IFC Entity Classification},
+  author={Emunds, Christoph and Pauen, Nicolas and Richter, Veronika and Frisch, Jérôme and van Treeck, Christoph},
+  booktitle = {EG-ICE 2021 Workshop on Intelligent Computing in Engineering},
+  year={2021}
+}
+```
+
 ## Acknowledgements
 The code for the neural networks is based on the implementations of the original publications, but had to be updated for recent PyTorch versions:
 * [WangYueFt](https://github.com/WangYueFt/dgcnn) for DGCNN
