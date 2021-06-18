@@ -68,8 +68,10 @@ If you use the IFCNet dataset or code please cite:
 @inproceedings{emunds2021ifcnet,
   title={IFCNet: A Benchmark Dataset for IFC Entity Classification},
   author={Emunds, Christoph and Pauen, Nicolas and Richter, Veronika and Frisch, Jérôme and van Treeck, Christoph},
-  booktitle = {EG-ICE 2021 Workshop on Intelligent Computing in Engineering},
-  year={2021}
+  booktitle = {Proceedings of the 28th International Workshop on Intelligent Computing in Engineering (EG-ICE)},
+  year={2021},
+  month={June},
+  day={30}
 }
 ```
 
