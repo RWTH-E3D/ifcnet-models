@@ -1,7 +1,7 @@
 IFCNet
 ==============================
 
-Neural Network Models for the [IFCNet Dataset](https://ifcnet.e3d.rwth-aachen.de/)
+Neural Network Models for the [IFCNet Dataset](https://ifcnet.e3d.rwth-aachen.de/). The paper can be found [here](https://arxiv.org/abs/2106.09712).
 
 ## Installation and Training
 
