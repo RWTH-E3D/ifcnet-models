@@ -1,5 +1,6 @@
 IFCNet
 ==============================
+**Update 13/06/2022:** The code for our follow-up paper [SpaRSE-BIM: Classification of IFC-based geometry via sparse convolutional neural networks](https://doi.org/10.1016/j.aei.2022.101641) will be added soon.
 
 Neural Network Models for the [IFCNet Dataset](https://ifcnet.e3d.rwth-aachen.de/). The paper can be found [here](https://arxiv.org/abs/2106.09712).
 
