@@ -5,6 +5,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
     precision_score, recall_score, f1_score)
+import MinkowskiEngine as ME
 from ray import tune
 from pathlib import Path
 import numpy as np
@@ -33,6 +34,7 @@ class Trainer:
         self.load()
 
     def train(self, epochs, global_step=0):
+        self.max_epochs = epochs
         
         for epoch in range(global_step, epochs + global_step):
             self.model.train()
@@ -40,14 +42,18 @@ class Trainer:
             all_labels = []
             running_loss = 0.0
 
-            for data, labels in self.train_loader:
-                data, labels = data.to(self.device), labels.to(self.device)
+            for coords, feats, labels in self.train_loader:
+                labels = torch.tensor(labels)
+                
+                coords, feats, labels = coords.to(self.device), feats.to(self.device), labels.to(self.device)
+                tensor = ME.TensorField(feats, coords)
+                
                 if self.after_load_cb:
                     data = self.after_load_cb(data)
 
                 self.optimizer.zero_grad()
 
-                outputs = self.model(data)
+                outputs = self.model(tensor)
 
                 loss = self.loss_fn(outputs, labels)
                 running_loss += loss.item()
@@ -76,12 +82,16 @@ class Trainer:
         running_loss = 0.0
 
         with torch.no_grad():
-            for data, labels in self.val_loader:
-                data, labels = data.to(self.device), labels.to(self.device)
+            for coords, feats, labels in self.val_loader:
+                labels = torch.tensor(labels)
+                
+                coords, feats, labels = coords.to(self.device), feats.to(self.device), labels.to(self.device)
+                tensor = ME.TensorField(feats, coords)
+                
                 if self.after_load_cb:
                     data = self.after_load_cb(data)
 
-                outputs = self.model(data)
+                outputs = self.model(tensor)
 
                 loss = self.loss_fn(outputs, labels)
                 running_loss += loss.item()
@@ -116,9 +126,10 @@ class Trainer:
         }
 
     def save(self, epoch):
-        with tune.checkpoint_dir(epoch) as d:
-            target_path = Path(d) / "checkpoint"
-            torch.save((self.model.state_dict(), self.optimizer.state_dict()), target_path)
+        if (epoch != 0 and epoch % 10 == 0) or epoch == self.max_epochs-1:
+            with tune.checkpoint_dir(epoch) as d:
+                target_path = Path(d) / "checkpoint"
+                torch.save((self.model.state_dict(), self.optimizer.state_dict()), target_path)
         
     def load(self):
         if not self.checkpoint_dir: return

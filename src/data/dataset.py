@@ -1,10 +1,12 @@
 import torch
+import json
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 from PIL import Image
 import numpy as np
 from pathlib import Path
 from src.data.util import read_ply
+import MinkowskiEngine as ME
 
 
 class IFCNetPly(Dataset):
@@ -37,6 +39,54 @@ class IFCNetPly(Dataset):
     def __len__(self):
         return len(self.files)
 
+    
+class IFCNetPlySparse(Dataset):
+
+    def __init__(self, data_root, class_names, partition="train", transform=None):
+        self.transform = transform
+        self.data_root = Path(data_root)
+        self.class_names = class_names
+        self.partition = partition
+        self.files = sorted(data_root.glob(f"**/{partition}/*.ply"))
+        self.quantization_info = None
+        
+        with (self.data_root / "quantization_info.json").open("r") as f:
+            self.quantization_info = json.load(f)
+
+        self.cache = {}
+
+    def __getitem__(self, idx):
+        if idx in self.cache:
+            pointcloud, label, quantization_size = self.cache[idx]
+        else:
+            f = self.files[idx]
+            df = read_ply(f)
+            pointcloud = np.ascontiguousarray(df["points"].to_numpy())
+            class_name = f.parts[-3]
+            quantization_size = self.quantization_info[class_name][f.stem + ".ifc"]
+            label = self.class_names.index(class_name)
+            self.cache[idx] = (pointcloud, label, quantization_size)
+
+        if self.transform:
+            pointcloud = self.transform(pointcloud)
+            
+        #coords, feats = ME.utils.sparse_quantize(
+        #    coordinates=pointcloud,
+        #    features=pointcloud,
+        #    quantization_size=quantization_size
+        #)
+        coords = pointcloud / quantization_size
+        feats = pointcloud
+        
+        # normalize
+        max_len = np.max(np.sum(feats**2, axis=1))
+        feats /= np.sqrt(max_len)
+
+        return coords, feats, label
+
+    def __len__(self):
+        return len(self.files)
+    
 
 class IFCNetNumpy(Dataset):
 

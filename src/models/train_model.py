@@ -7,6 +7,7 @@ from datetime import datetime
 from src.models.mvcnn import train_mvcnn
 from src.models.dgcnn import train_dgcnn
 from src.models.meshnet import train_meshnet
+from src.models.minkowski import train_minkowski_pointnet
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
@@ -17,6 +18,10 @@ class Model(str, Enum):
     MVCNN = "MVCNN"
     DGCNN = "DGCNN"
     MeshNet = "MeshNet"
+    IFCGeomDetailed = "IFCGeomDetailed"
+    IFCGeomUniform = "IFCGeomUniform"
+    IFCGeomLowRes = "IFCGeomLowRes"
+    BIMGEOM = "BIMGEOM"
 
 
 def main(args):
@@ -25,6 +30,7 @@ def main(args):
     log_dir = Path(f"./logs/{model.value}")
     log_dir.mkdir(exist_ok=True, parents=True)
     data_root = Path(f"./data/processed/{model.value}/IFCNetCore").absolute()
+    #data_root = Path(f"./data/processed/{model.value}/BIMGEOM").absolute()
 
     with open("IFCNetCore_Classes.json", "r") as f:
         class_names = json.load(f)
@@ -80,6 +86,21 @@ def main(args):
             class_names=class_names,
             eval_on_test=config_file is not None
         )
+    else:
+        config = {
+            "batch_size": tune.choice([32, 64]),
+            "learning_rate": tune.loguniform(1e-4, 1e-2),
+            "weight_decay": tune.loguniform(1e-4, 1e-2),
+            "embedding_dim": 1024,
+            "epochs": 250
+        }
+        
+        train_func = partial(
+            train_minkowski_pointnet,
+            data_root = data_root,
+            class_names=class_names,
+            eval_on_test=config_file is not None
+        )
 
     if config_file:
         with config_file.open("r") as f:
@@ -96,7 +117,7 @@ def main(args):
 
     result = tune.run(
         train_func,
-        resources_per_trial={"cpu": 8, "gpu": 1},
+        resources_per_trial={"cpu": 16, "gpu": 1},
         local_dir=log_dir,
         config=config,
         mode="max",

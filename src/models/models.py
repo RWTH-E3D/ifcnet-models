@@ -4,6 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 from torch.nn.parameter import Parameter
 import numpy as np
+import MinkowskiEngine as ME
+from MinkowskiEngine.modules.resnet_block import BasicBlock, Bottleneck
 
 
 class Model(nn.Module):
@@ -17,8 +19,618 @@ class Model(nn.Module):
         
     def load(self, path):
         self.load_state_dict(torch.load(path))
+        
+
+class MinkowskiFCNN(Model, ME.MinkowskiNetwork):
+    def __init__(
+        self,
+        in_channel,
+        out_channel,
+        embedding_channel=1024,
+        channels=(32, 48, 64, 96, 128),
+        D=3,
+    ):
+        ME.MinkowskiNetwork.__init__(self, D)
+
+        self.network_initialization(
+            in_channel,
+            out_channel,
+            channels=channels,
+            embedding_channel=embedding_channel,
+            kernel_size=3,
+            D=D,
+        )
+        self.weight_initialization()
+
+    def get_mlp_block(self, in_channel, out_channel):
+        return nn.Sequential(
+            ME.MinkowskiLinear(in_channel, out_channel, bias=False),
+            ME.MinkowskiBatchNorm(out_channel),
+            ME.MinkowskiLeakyReLU(),
+        )
+
+    def get_conv_block(self, in_channel, out_channel, kernel_size, stride):
+        return nn.Sequential(
+            ME.MinkowskiConvolution(
+                in_channel,
+                out_channel,
+                kernel_size=kernel_size,
+                stride=stride,
+                dimension=self.D,
+            ),
+            ME.MinkowskiBatchNorm(out_channel),
+            ME.MinkowskiLeakyReLU(),
+        )
+
+    def network_initialization(
+        self,
+        in_channel,
+        out_channel,
+        channels,
+        embedding_channel,
+        kernel_size,
+        D=3,
+    ):
+        self.mlp1 = self.get_mlp_block(in_channel, channels[0])
+        self.conv1 = self.get_conv_block(
+            channels[0],
+            channels[1],
+            kernel_size=kernel_size,
+            stride=1,
+        )
+        self.conv2 = self.get_conv_block(
+            channels[1],
+            channels[2],
+            kernel_size=kernel_size,
+            stride=2,
+        )
+
+        self.conv3 = self.get_conv_block(
+            channels[2],
+            channels[3],
+            kernel_size=kernel_size,
+            stride=2,
+        )
+
+        self.conv4 = self.get_conv_block(
+            channels[3],
+            channels[4],
+            kernel_size=kernel_size,
+            stride=2,
+        )
+        self.conv5 = nn.Sequential(
+            self.get_conv_block(
+                channels[1] + channels[2] + channels[3] + channels[4],
+                embedding_channel // 4,
+                kernel_size=3,
+                stride=2,
+            ),
+            self.get_conv_block(
+                embedding_channel // 4,
+                embedding_channel // 2,
+                kernel_size=3,
+                stride=2,
+            ),
+            self.get_conv_block(
+                embedding_channel // 2,
+                embedding_channel,
+                kernel_size=3,
+                stride=2,
+            ),
+        )
+
+        self.pool = ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
+
+        self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
+        self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
+
+        self.final = nn.Sequential(
+            self.get_mlp_block(embedding_channel * 2, 512),
+            ME.MinkowskiDropout(),
+            self.get_mlp_block(512, 512),
+            ME.MinkowskiLinear(512, out_channel, bias=True),
+        )
+
+        # No, Dropout, last 256 linear, AVG_POOLING 92%
+
+    def weight_initialization(self):
+        for m in self.modules():
+            if isinstance(m, ME.MinkowskiConvolution):
+                ME.utils.kaiming_normal_(m.kernel, mode="fan_out", nonlinearity="relu")
+
+            if isinstance(m, ME.MinkowskiBatchNorm):
+                nn.init.constant_(m.bn.weight, 1)
+                nn.init.constant_(m.bn.bias, 0)
+
+    def forward(self, x: ME.TensorField):
+        x = self.mlp1(x)
+        y = x.sparse()
+
+        y = self.conv1(y)
+        y1 = self.pool(y)
+
+        y = self.conv2(y1)
+        y2 = self.pool(y)
+
+        y = self.conv3(y2)
+        y3 = self.pool(y)
+
+        y = self.conv4(y3)
+        y4 = self.pool(y)
+
+        x1 = y1.slice(x)
+        x2 = y2.slice(x)
+        x3 = y3.slice(x)
+        x4 = y4.slice(x)
+
+        x = ME.cat(x1, x2, x3, x4)
+
+        y = self.conv5(x.sparse())
+        x1 = self.global_max_pool(y)
+        x2 = self.global_avg_pool(y)
+
+        return self.final(ME.cat(x1, x2)).F
+    
+    
+class MinkowskiCE(Model, ME.MinkowskiNetwork):
+    def __init__(
+        self,
+        in_channel,
+        out_channel,
+        embedding_channel=1024,
+        channels=(16, 32, 48, 64, 96, 128, 160),
+        D=3,
+    ):
+        ME.MinkowskiNetwork.__init__(self, D)
+
+        self.network_initialization(
+            in_channel,
+            out_channel,
+            channels=channels,
+            embedding_channel=embedding_channel,
+            kernel_size=3,
+            D=D,
+        )
+        self.weight_initialization()
+
+    def get_mlp_block(self, in_channel, out_channel):
+        return nn.Sequential(
+            ME.MinkowskiLinear(in_channel, out_channel, bias=False),
+            ME.MinkowskiBatchNorm(out_channel),
+            ME.MinkowskiLeakyReLU(),
+        )
+
+    def get_conv_block(self, in_channel, out_channel, kernel_size, stride):
+        return nn.Sequential(
+            ME.MinkowskiConvolution(
+                in_channel,
+                out_channel,
+                kernel_size=kernel_size,
+                stride=stride,
+                dimension=self.D,
+            ),
+            ME.MinkowskiBatchNorm(out_channel),
+            ME.MinkowskiLeakyReLU(),
+        )
+
+    def network_initialization(
+        self,
+        in_channel,
+        out_channel,
+        channels,
+        embedding_channel,
+        kernel_size,
+        D=3,
+    ):
+        self.mlp1 = self.get_mlp_block(in_channel, channels[0])
+        
+        self.convolutions = [
+            self.get_conv_block(
+                channels[i],
+                channels[i+1],
+                kernel_size=kernel_size,
+                stride=1
+            ) for i in range(len(channels)-1)
+        ]
+        
+        self.temp = nn.Sequential(*self.convolutions)
+        
+        self.embedding_conv = nn.Sequential(
+            self.get_conv_block(
+                sum(channels[1:]),
+                embedding_channel // 4,
+                kernel_size=3,
+                stride=2,
+            ),
+            self.get_conv_block(
+                embedding_channel // 4,
+                embedding_channel // 2,
+                kernel_size=3,
+                stride=2,
+            ),
+            self.get_conv_block(
+                embedding_channel // 2,
+                embedding_channel,
+                kernel_size=3,
+                stride=2,
+            ),
+        )
+
+        self.pool = ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
+
+        self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
+        self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
+
+        self.final = nn.Sequential(
+            self.get_mlp_block(embedding_channel * 2, 512),
+            ME.MinkowskiDropout(),
+            self.get_mlp_block(512, 256),
+            ME.MinkowskiLinear(256, out_channel, bias=True),
+        )
+
+        # No, Dropout, last 256 linear, AVG_POOLING 92%
+
+    def weight_initialization(self):
+        for m in self.modules():
+            if isinstance(m, ME.MinkowskiConvolution):
+                ME.utils.kaiming_normal_(m.kernel, mode="fan_out", nonlinearity="relu")
+
+            if isinstance(m, ME.MinkowskiBatchNorm):
+                nn.init.constant_(m.bn.weight, 1)
+                nn.init.constant_(m.bn.bias, 0)
+
+    def forward(self, x: ME.TensorField):
+        outputs = []
+        
+        x = self.mlp1(x)
+        y = x.sparse()
+
+        for layer in self.convolutions:
+            y = layer(y)
+            y = self.pool(y)
+            outputs.append(y)
+
+        slices = [o.slice(x) for o in outputs]
+
+        x = ME.cat(*slices)
+
+        y = self.embedding_conv(x.sparse())
+        x1 = self.global_max_pool(y)
+        x2 = self.global_avg_pool(y)
+
+        return self.final(ME.cat(x1, x2)).F
+
+    
+class MinkowskiCE2(Model, ME.MinkowskiNetwork):
+    def __init__(
+        self,
+        in_channel,
+        out_channel,
+        embedding_channel=1024,
+        channels=(16, 32, 48, 64, 96, 128),
+        D=3,
+        return_feats=False
+    ):
+        ME.MinkowskiNetwork.__init__(self, D)
+        self.return_feats = return_feats
+
+        self.network_initialization(
+            in_channel,
+            out_channel,
+            channels=channels,
+            embedding_channel=embedding_channel,
+            kernel_size=3,
+            D=D,
+        )
+        self.weight_initialization()
+
+    def get_mlp_block(self, in_channel, out_channel):
+        return nn.Sequential(
+            ME.MinkowskiLinear(in_channel, out_channel, bias=False),
+            ME.MinkowskiBatchNorm(out_channel),
+            ME.MinkowskiLeakyReLU(),
+        )
+
+    def get_conv_block(self, in_channel, out_channel, kernel_size, stride):
+        return nn.Sequential(
+            ME.MinkowskiConvolution(
+                in_channel,
+                out_channel,
+                kernel_size=kernel_size,
+                stride=stride,
+                dimension=self.D,
+            ),
+            ME.MinkowskiBatchNorm(out_channel),
+            ME.MinkowskiLeakyReLU(),
+        )
+
+    def network_initialization(
+        self,
+        in_channel,
+        out_channel,
+        channels,
+        embedding_channel,
+        kernel_size,
+        D=3,
+    ):
+        self.mlp1 = self.get_mlp_block(3, 16)
+        
+        self.conv1 = self.get_conv_block(
+            16,
+            32,
+            kernel_size=kernel_size,
+            stride=1
+        )
+        self.down1 = self.get_conv_block(
+            48,
+            32,
+            kernel_size=1,
+            stride=1
+        )
+        
+        self.conv2 = self.get_conv_block(
+            32,
+            48,
+            kernel_size=kernel_size,
+            stride=1
+        )
+        self.down2 = self.get_conv_block(
+            80,
+            48,
+            kernel_size=1,
+            stride=1
+        )
+        
+        self.conv3 = self.get_conv_block(
+            48,
+            96,
+            kernel_size=kernel_size,
+            stride=1
+        )
+        self.down3 = self.get_conv_block(
+            144,
+            96,
+            kernel_size=1,
+            stride=1
+        )
+        
+        self.conv4 = self.get_conv_block(
+            96,
+            128,
+            kernel_size=kernel_size,
+            stride=1
+        )
+        self.down4 = self.get_conv_block(
+            224,
+            128,
+            kernel_size=1,
+            stride=1
+        )
+        
+        self.conv5 = self.get_conv_block(
+            128,
+            256,
+            kernel_size=kernel_size,
+            stride=1
+        )
+        self.down5 = self.get_conv_block(
+            384,
+            256,
+            kernel_size=1,
+            stride=1
+        )
+        
+        self.conv6 = self.get_conv_block(
+            256,
+            512,
+            kernel_size=kernel_size,
+            stride=1
+        )
+
+        self.pool = ME.MinkowskiMaxPooling(kernel_size=3, stride=2, dimension=D)
+
+        self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
+        self.global_avg_pool = ME.MinkowskiGlobalAvgPooling()
+
+        self.final = nn.Sequential(
+            self.get_mlp_block(512 * 2, 512),
+            ME.MinkowskiDropout(),
+            self.get_mlp_block(512, 256),
+            ME.MinkowskiDropout(),
+            ME.MinkowskiLinear(256, out_channel, bias=True),
+        )
+
+    def weight_initialization(self):
+        for m in self.modules():
+            if isinstance(m, ME.MinkowskiConvolution):
+                ME.utils.kaiming_normal_(m.kernel, mode="fan_out", nonlinearity="relu")
+
+            if isinstance(m, ME.MinkowskiBatchNorm):
+                nn.init.constant_(m.bn.weight, 1)
+                nn.init.constant_(m.bn.bias, 0)
+
+    def forward(self, x: ME.TensorField):
+        x = self.mlp1(x)
+        y = x.sparse()
+        #print(y.F.shape)
+
+        out = self.conv1(y)
+        #print(out.F.shape)
+        y1 = ME.cat(y, out)
+        #print(y1.F.shape)
+        y1 = self.down1(y1)
+        y1 = self.pool(y1)
+
+        out = self.conv2(y1)
+        #print(out.F.shape)
+        y2 = ME.cat(y1, out)
+        #print(y2.F.shape)
+        y2 = self.down2(y2)
+        #print(y2.F.shape)
+        y2 = self.pool(y2)
+        #print(y2.F.shape)
+
+        out = self.conv3(y2)
+        #print(out.F.shape)
+        y3 = ME.cat(y2, out)
+        #print(y3.F.shape)
+        y3 = self.down3(y3)
+        #print(y3.F.shape)
+        y3 = self.pool(y3)
+        #print(y3.F.shape)
+
+        out = self.conv4(y3)
+        #print(out.F.shape)
+        y4 = ME.cat(y3, out)
+        #print(y4.F.shape)
+        y4 = self.down4(y4)
+        #print(y4.F.shape)
+        y4 = self.pool(y4)
+        #print(y4.F.shape)
+
+        out = self.conv5(y4)
+        y5 = ME.cat(y4, out)
+        y5 = self.down5(y5)
+        y5 = self.pool(y5)
+        
+        y = self.conv6(y5)
+        
+        x1 = self.global_max_pool(y)
+        x2 = self.global_avg_pool(y)
+        
+        if self.return_feats:
+            y = ME.cat(x1, x2)
+            y = self.final[0](y)
+            y = self.final[1](y)
+            feats = self.final[2](y)
+            y = self.final[3](feats)
+            logits = self.final[4](y)
+            return logits.F, feats.F
+
+        return self.final(ME.cat(x1, x2)).F
+    
+    
+class ResNetBase(nn.Module):
+    BLOCK = None
+    LAYERS = ()
+    INIT_DIM = 64
+    PLANES = (64, 128, 256, 512)
+
+    def __init__(self, in_channels, out_channels, D=3):
+        nn.Module.__init__(self)
+        self.D = D
+        assert self.BLOCK is not None
+
+        self.network_initialization(in_channels, out_channels, D)
+        self.weight_initialization()
+
+    def network_initialization(self, in_channels, out_channels, D):
+
+        self.inplanes = self.INIT_DIM
+        self.conv1 = nn.Sequential(
+            ME.MinkowskiConvolution(
+                in_channels, self.inplanes, kernel_size=3, stride=2, dimension=D
+            ),
+            ME.MinkowskiInstanceNorm(self.inplanes),
+            ME.MinkowskiReLU(inplace=True),
+            ME.MinkowskiMaxPooling(kernel_size=2, stride=2, dimension=D),
+        )
+
+        self.layer1 = self._make_layer(
+            self.BLOCK, self.PLANES[0], self.LAYERS[0], stride=2
+        )
+        self.layer2 = self._make_layer(
+            self.BLOCK, self.PLANES[1], self.LAYERS[1], stride=2
+        )
+        self.layer3 = self._make_layer(
+            self.BLOCK, self.PLANES[2], self.LAYERS[2], stride=2
+        )
+        self.layer4 = self._make_layer(
+            self.BLOCK, self.PLANES[3], self.LAYERS[3], stride=2
+        )
+
+        self.conv5 = nn.Sequential(
+            ME.MinkowskiDropout(),
+            ME.MinkowskiConvolution(
+                self.inplanes, self.inplanes, kernel_size=3, stride=3, dimension=D
+            ),
+            ME.MinkowskiInstanceNorm(self.inplanes),
+            ME.MinkowskiGELU(),
+        )
+
+        self.glob_pool = ME.MinkowskiGlobalMaxPooling()
+
+        self.final = ME.MinkowskiLinear(self.inplanes, out_channels, bias=True)
+
+    def weight_initialization(self):
+        for m in self.modules():
+            if isinstance(m, ME.MinkowskiConvolution):
+                ME.utils.kaiming_normal_(m.kernel, mode="fan_out", nonlinearity="relu")
+
+            if isinstance(m, ME.MinkowskiBatchNorm):
+                nn.init.constant_(m.bn.weight, 1)
+                nn.init.constant_(m.bn.bias, 0)
+
+    def _make_layer(self, block, planes, blocks, stride=1, dilation=1, bn_momentum=0.1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                ME.MinkowskiConvolution(
+                    self.inplanes,
+                    planes * block.expansion,
+                    kernel_size=1,
+                    stride=stride,
+                    dimension=self.D,
+                ),
+                ME.MinkowskiBatchNorm(planes * block.expansion),
+            )
+        layers = []
+        layers.append(
+            block(
+                self.inplanes,
+                planes,
+                stride=stride,
+                dilation=dilation,
+                downsample=downsample,
+                dimension=self.D,
+            )
+        )
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(
+                block(
+                    self.inplanes, planes, stride=1, dilation=dilation, dimension=self.D
+                )
+            )
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x: ME.SparseTensor):
+        x = self.conv1(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.conv5(x)
+        x = self.glob_pool(x)
+        return self.final(x)
 
 
+class ResNet14(ResNetBase):
+    BLOCK = BasicBlock
+    LAYERS = (1, 1, 1, 1)
+
+
+class ResNet18(ResNetBase):
+    BLOCK = BasicBlock
+    LAYERS = (2, 2, 2, 2)
+
+
+class ResNet34(ResNetBase):
+    BLOCK = BasicBlock
+    LAYERS = (3, 4, 6, 3)
+    
+    
 class SVCNN(Model):
 
     def __init__(self, nclasses, pretrained=True, cnn_name='vgg11'):

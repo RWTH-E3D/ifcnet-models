@@ -1,1 +1,1 @@
-from .dataset import SingleImgDataset, MultiviewImgDataset, IFCNetPly, IFCNetNumpy
+from .dataset import SingleImgDataset, MultiviewImgDataset, IFCNetPly, IFCNetNumpy, IFCNetPlySparse

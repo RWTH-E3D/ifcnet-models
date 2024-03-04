@@ -90,3 +90,5 @@ target/
 .mypy_cache/
 
 notebooks/*Probs.npz
+*.7z
+models/
