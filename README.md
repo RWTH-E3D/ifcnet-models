@@ -1,8 +1,8 @@
 IFCNet
 ==============================
-**Update 13/06/2022:** The code for our follow-up paper [SpaRSE-BIM: Classification of IFC-based geometry via sparse convolutional neural networks](https://doi.org/10.1016/j.aei.2022.101641) will be added soon.
-
 Neural Network Models for the [IFCNet Dataset](https://ifcnet.e3d.rwth-aachen.de/). The paper can be found [here](https://arxiv.org/abs/2106.09712).
+
+Note: The code for our follow-up paper [SpaRSE-BIM: Classification of IFC-based geometry via sparse convolutional neural networks](https://doi.org/10.1016/j.aei.2022.101641) is available on the `sparse-bim` branch. However, the `Trainer` class on that branch had to be adapted and is thus now incompatible with the other existing models. This effectively means that the `sparse-bim` branch can only be used to train the SpaRSE-BIM model, while the `master` branch can be used to train the other models.
 
 ## Installation and Training
 
